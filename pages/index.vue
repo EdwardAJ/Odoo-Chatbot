@@ -5,10 +5,8 @@
      :title="'Pudak Scientific Customer Service'"
      :initial-feed="feed"
      :new-message="message" />
-     {{ state }}
    </div>
 </template>
-
 <script>
 
 import Chat from 'basic-vue-chat'
@@ -39,11 +37,15 @@ export default {
       // KeluhanState: 0 for handleIsiKeluhan, 1 for chooseDepartment.
       keluhanStateEnum: {
         ISIKELUHAN: 1,
-        CHOOSEDEPARTMENT: 2
+        ISIEMAIL: 2,
+        CHOOSEDEPARTMENT: 3
       },
       state: 1,
       keluhanState: 1,
-      backendURL: "http://localhost:8006"
+      backendURL: "https://strong-monkey-91.localtunnel.me",
+      keluhanContent: "",
+      email: "",
+      departments: {}
     }
   },
   methods: {
@@ -79,31 +81,111 @@ export default {
       this.sendMessage('Silakan ketik keluhan Anda.')
       this.state = this.stateEnum.KELUHAN
     },
+    handlePertanyaanSuccess (response) {
+      this.sendMessage(response.data.data)
+      this.resetState()
+      this.sendMessage("Ketik 'bertanya' untuk bertanya, atau 'keluhan' untuk keluhan.")
+    },
     handleIsiPertanyaan (message) {
       // Send message to the backend
-      var url = this.backendURL + "/api/v1/pertanyaan/"
-      axios.get({ pertanyaan: message}, url).then((response) => {
-        console.log("response: ", response)
-         // Reset to initial state...
-        // this.resetState()
+      var url = this.backendURL + "/api/v1/pertanyaan"
+      axios.get(url, { params: {
+        pertanyaan: message
+      } }).then((response) => {
+        if (response.status != 200 && response.status != 201) {
+          this.sendMessage("Silakan coba pertanyaan yang lain.")
+        } else {
+          this.handlePertanyaanSuccess(response)
+        }
       }).catch(error => {
         console.log(error)
+        this.sendMessage("Terdapat kesalahan. Silakan ulangi kembali.")
       })
     },
     handleIsiKeluhan (message) {
-      // Choose the departments, call backend API
-      this.getAllEmployee()
+      this.keluhan = message
+      this.sendMessage("Silakan masukkan e-mail Anda.")
       // Change keluhanState
-      this.keluhanState = this.keluhanStateEnum.CHOOSEDEPARTMENT
+      this.keluhanState = this.keluhanStateEnum.ISIEMAIL
     },
-    getAllEmployee () {
-      console.log('GET ALL EMPLOYEE')
-      axios.post(this.backendURL + "/api/v1/employee/").then((response) => {
-        console.log(response.data);
+    handleEmail (message) {
+      this.email = message
+      // Get all departments
+      this.handleDepartmentsFromBackEnd()
+      this.sendMessage("Harap tunggu...")
+    },
+    handleDepartmentsFromBackEnd () {
+      let url = this.backendURL + "/api/v1/employee/"
+      console.log(url)
+      axios.get(url).then((response) => {
+        response.data.forEach(employeeElement => {
+          if (!this.departments[employeeElement.department]) {
+            this.departments[employeeElement.department] = employeeElement.department
+          }
+        })
+        this.sendExistingDepartmentsMessage()
+      }).catch(error => {
+        console.log(error)
+        this.sendErrorMessage()
       })
     },
-    sendKeluhanToBackEnd () {
-
+    sendExistingDepartmentsMessage () {
+      let newMessage = "Silakan ketik salah satu dari departemen berikut: "
+      const departments = Object.keys(this.departments)
+      for (const dept of departments) {
+        newMessage += dept + ", "
+      }
+      this.sendMessage(newMessage)
+      this.keluhanState = this.keluhanStateEnum.CHOOSEDEPARTMENT
+    },
+    handleDepartment (message) {
+      if (this.validateDepartment(message)) {
+        // Send to backend
+        this.sendKeluhanRequest(message)
+      } else {
+        this.sendMessage("Silakan ketik departemen yang benar!")
+      }
+    },
+    validateDepartment (message) {
+      // If key exists
+      if (!this.departments[message]) {
+        return false
+      }
+      return true
+    },
+    sendKeluhanRequest (dept) {
+      let payload = {
+        pelanggan: {
+          email: this.email
+        },
+        department: dept,
+        isi: this.keluhanContent
+      }
+      let url = this.backendURL + "/api/v1/keluhan/"
+      axios.post(url, payload).then((response) => {
+        this.notifyAcceptedKeluhan(response)
+      }).catch(error => {
+        console.log(error)
+        this.sendErrorMessages()
+      })
+      this.sendMessage("Harap tunggu...")
+    },
+    sendErrorMessage () {
+      this.sendMessage("Terdapat kesalahan pada server. Silakan ulangi kembali.")
+      this.resetKeluhan()
+    },
+    notifyAcceptedKeluhan (response) {
+      this.sendMessage("Keluhan Anda telah diterima oleh: " + response.data.data.penanggungjawab.email)
+      this.sendMessage("Berikut ini adalah respon: " + response.data.data.jawaban)
+      this.resetKeluhan()
+    },
+    resetKeluhan () {
+      this.keluhanContent = ""
+      this.email = ""
+      this.departments = {}
+      this.resetKeluhanState()
+      this.resetState()
+      this.sendMessage("Ketik 'bertanya' untuk bertanya, atau 'keluhan' untuk keluhan.")
     },
     sendMessage (message) {
       // Construct new message
@@ -130,10 +212,10 @@ export default {
       } else if (this.state == this.stateEnum.KELUHAN) {
         if (this.keluhanState == this.keluhanStateEnum.ISIKELUHAN) {
           this.handleIsiKeluhan(message)
+        } else if (this.keluhanState == this.keluhanStateEnum.ISIEMAIL) {
+          this.handleEmail(message)
         } else if (this.keluhanState == this.keluhanStateEnum.CHOOSEDEPARTMENT) {
-          if (this.validateMessageDepartment(message)) {
-            this.sendKeluhanToBackEnd()
-          }
+          this.handleDepartment(message)
         }
       }
     }
@@ -141,7 +223,7 @@ export default {
 }
 </script>
 <style lang = "scss">
-    $primary: red;
-    $window-height: 200px;
-    @import "basic-vue-chat/src/assets/scss/main.scss";
+    $secondary: red;
+    $message-max-width: 100px;
+    @import "@/node_modules/basic-vue-chat/src/assets/scss/main.scss";
 </style>
