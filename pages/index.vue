@@ -5,12 +5,15 @@
      :title="'Pudak Scientific Customer Service'"
      :initial-feed="feed"
      :new-message="message" />
-     {{ message }}
+     {{ state }}
    </div>
 </template>
 
 <script>
+
 import Chat from 'basic-vue-chat'
+import axios from 'axios'
+
 export default {
   components: {
     Chat
@@ -27,13 +30,29 @@ export default {
           date: null
         }
       ],
-      // State: 0 for initial, 1 for 'bertanya' and 2 for 'keluhan'
-      state: 0,
+      // State: 1 for initial, 2 for 'bertanya' and 3 for 'keluhan'
+      stateEnum: {
+        INITIAL: 1,
+        PERTANYAAN: 2,
+        KELUHAN: 3
+      },
       // KeluhanState: 0 for handleIsiKeluhan, 1 for chooseDepartment.
-      keluhanState: 0
+      keluhanStateEnum: {
+        ISIKELUHAN: 1,
+        CHOOSEDEPARTMENT: 2
+      },
+      state: 1,
+      keluhanState: 1,
+      backendURL: "http://localhost:8006"
     }
   },
   methods: {
+    resetKeluhanState () {
+      this.keluhanState = this.keluhanStateEnum.ISIKELUHAN
+    },
+    resetState() {
+      this.state = this.stateEnum.INITIAL
+    },
     pushToFeed (element) {
       this.feed.push(element)
     },
@@ -49,29 +68,42 @@ export default {
         this.sendMessage("Ketik 'bertanya' untuk bertanya, atau 'keluhan' untuk keluhan.")
       }
     },
+    validateMessageDepartment (message) {
+      return true
+    },
     handleBertanyaRequest () {
       this.sendMessage('Silakan ketik pertanyaan Anda.')
-      this.state = 1
+      this.state = this.stateEnum.PERTANYAAN
     },
     handleKeluhanRequest () {
       this.sendMessage('Silakan ketik keluhan Anda.')
-      this.state = 2
+      this.state = this.stateEnum.KELUHAN
     },
     handleIsiPertanyaan (message) {
       // Send message to the backend
-      this.state = 0
+      var url = this.backendURL + "/api/v1/pertanyaan/"
+      axios.get({ pertanyaan: message}, url).then((response) => {
+        console.log("response: ", response)
+         // Reset to initial state...
+        // this.resetState()
+      }).catch(error => {
+        console.log(error)
+      })
     },
     handleIsiKeluhan (message) {
       // Choose the departments, call backend API
       this.getAllEmployee()
       // Change keluhanState
-      this.keluhanState = 1
-
+      this.keluhanState = this.keluhanStateEnum.CHOOSEDEPARTMENT
     },
     getAllEmployee () {
-      axios.post("http://localhost:8006/api/v1/employee/").then((response) => {
+      console.log('GET ALL EMPLOYEE')
+      axios.post(this.backendURL + "/api/v1/employee/").then((response) => {
         console.log(response.data);
       })
+    },
+    sendKeluhanToBackEnd () {
+
     },
     sendMessage (message) {
       // Construct new message
@@ -87,23 +119,21 @@ export default {
       }
       return newMessage
     },
-    sendBertanyaRequest (message) {
-      // Construct new JSON
-      var request = {
-        "pertanyaan" : message
-      }
-    },
     onNewOwnMessage (message) {
       // Change the last element in the feed:
       this.changeFeedElementDate()
       // Check for the states:
-      if (this.state == 0) {
+      if (this.state == this.stateEnum.INITIAL) {
         this.validateInitialMessage(message)
-      } else if (this.state == 1) {
+      } else if (this.state == this.stateEnum.PERTANYAAN) {
         this.handleIsiPertanyaan(message)
-      } else if (this.state == 2) {
-        if (this.keluhanState == 0) {
-            this.handleIsiKeluhan(message)
+      } else if (this.state == this.stateEnum.KELUHAN) {
+        if (this.keluhanState == this.keluhanStateEnum.ISIKELUHAN) {
+          this.handleIsiKeluhan(message)
+        } else if (this.keluhanState == this.keluhanStateEnum.CHOOSEDEPARTMENT) {
+          if (this.validateMessageDepartment(message)) {
+            this.sendKeluhanToBackEnd()
+          }
         }
       }
     }
