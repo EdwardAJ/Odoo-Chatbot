@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "basic-vue-chat": "^0.3.5",
-    "nuxt": "^2.0.0"
+    "node-sass": "^4.13.0",
+    "nuxt": "^2.0.0",
+    "sass-loader": "^8.0.0"
   },
   "devDependencies": {}
 }
