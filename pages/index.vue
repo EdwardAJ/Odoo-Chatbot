@@ -109,10 +109,20 @@ export default {
       this.keluhanState = this.keluhanStateEnum.ISIEMAIL
     },
     handleEmail (message) {
-      this.email = message
-      // Get all departments
-      this.handleDepartmentsFromBackEnd()
-      this.sendMessage("Harap tunggu...")
+      if (this.validateEmail(message)) {
+        this.email = message
+        // Get all departments
+        this.handleDepartmentsFromBackEnd()
+        this.sendMessage("Harap tunggu...")
+      } else {
+        this.sendMessage("Harap ketik email yang valid!")
+      }
+    },
+    validateEmail (email) {
+      if ((/(^\w.*@\w+\.\w)/.test(email))){
+        return true
+      }
+      return false
     },
     handleDepartmentsFromBackEnd () {
       let url = this.backendURL + "/api/v1/employee/"
